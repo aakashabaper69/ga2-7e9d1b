@@ -4,6 +4,14 @@ from pydantic import BaseModel
 import json
 import numpy as np
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app = FastAPI()
 
 app.add_middleware(
