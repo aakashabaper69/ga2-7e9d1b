@@ -1,19 +1,11 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import json
 import numpy as np
 import os
 
 app = FastAPI()
-
-# Proper CORS (no credentials)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 class Payload(BaseModel):
     regions: list[str]
@@ -46,7 +38,27 @@ async def compute_latency(payload: Payload):
             "breaches": sum(1 for l in latencies if l > payload.threshold_ms),
         }
 
-    return response
+    return JSONResponse(
+        content=response,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+        },
+    )
+
+
+# Explicit OPTIONS handler
+@app.api_route("/", methods=["OPTIONS"])
+async def options_handler():
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+        },
+    )
 
 
 handler = app
