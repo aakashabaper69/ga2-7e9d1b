@@ -2,9 +2,9 @@ import json
 import numpy as np
 import os
 
-def handler(request):
+def handler(request, context):
 
-    # Handle CORS preflight
+    # CORS preflight
     if request.method == "OPTIONS":
         return {
             "statusCode": 200,
@@ -19,10 +19,17 @@ def handler(request):
     if request.method != "POST":
         return {
             "statusCode": 405,
+            "headers": {
+                "Access-Control-Allow-Origin": "*",
+            },
             "body": json.dumps({"error": "Method not allowed"})
         }
 
-    body = json.loads(request.body)
+    # Proper body parsing for Vercel
+    try:
+        body = json.loads(request.body.decode())
+    except:
+        body = {}
 
     regions = body.get("regions", [])
     threshold = body.get("threshold_ms", 0)
