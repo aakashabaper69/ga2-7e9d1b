@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import json
@@ -7,11 +7,10 @@ import os
 
 app = FastAPI()
 
-# Proper CORS configuration
+# Proper CORS (no credentials)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -21,22 +20,9 @@ class Payload(BaseModel):
     threshold_ms: int
 
 
-@app.options("/")
-async def options_handler():
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*",
-        },
-    )
-
-
 @app.post("/")
 async def compute_latency(payload: Payload):
 
-    # Safe absolute path for Vercel
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     file_path = os.path.join(BASE_DIR, "q-vercel-latency.json")
 
@@ -47,7 +33,6 @@ async def compute_latency(payload: Payload):
 
     for region in payload.regions:
         records = [r for r in data if r["region"] == region]
-
         if not records:
             continue
 
@@ -64,5 +49,4 @@ async def compute_latency(payload: Payload):
     return response
 
 
-# Required for Vercel
 handler = app
