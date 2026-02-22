@@ -1,19 +1,31 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 import json
 import numpy as np
 import os
 
-app = FastAPI()
+def handler(request):
 
-class Payload(BaseModel):
-    regions: list[str]
-    threshold_ms: int
+    # Handle CORS preflight
+    if request.method == "OPTIONS":
+        return {
+            "statusCode": 200,
+            "headers": {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            },
+            "body": ""
+        }
 
+    if request.method != "POST":
+        return {
+            "statusCode": 405,
+            "body": json.dumps({"error": "Method not allowed"})
+        }
 
-@app.post("/")
-async def compute_latency(payload: Payload):
+    body = json.loads(request.body)
+
+    regions = body.get("regions", [])
+    threshold = body.get("threshold_ms", 0)
 
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     file_path = os.path.join(BASE_DIR, "q-vercel-latency.json")
@@ -23,7 +35,7 @@ async def compute_latency(payload: Payload):
 
     response = {}
 
-    for region in payload.regions:
+    for region in regions:
         records = [r for r in data if r["region"] == region]
         if not records:
             continue
@@ -35,30 +47,16 @@ async def compute_latency(payload: Payload):
             "avg_latency": float(np.mean(latencies)),
             "p95_latency": float(np.percentile(latencies, 95)),
             "avg_uptime": float(np.mean(uptimes)),
-            "breaches": sum(1 for l in latencies if l > payload.threshold_ms),
+            "breaches": sum(1 for l in latencies if l > threshold),
         }
 
-    return JSONResponse(
-        content=response,
-        headers={
+    return {
+        "statusCode": 200,
+        "headers": {
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "*",
             "Access-Control-Allow-Methods": "POST, OPTIONS",
-        },
-    )
-
-
-# Explicit OPTIONS handler
-@app.api_route("/", methods=["OPTIONS"])
-async def options_handler():
-    return JSONResponse(
-        content={},
-        headers={
-            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Content-Type": "application/json",
         },
-    )
-
-
-handler = app
+        "body": json.dumps(response),
+    }
