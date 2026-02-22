@@ -1,26 +1,50 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import json
-import numpy as np
 import os
 
-app = FastAPI()
+def percentile(data, percent):
+    if not data:
+        return 0
+    data = sorted(data)
+    k = (len(data) - 1) * (percent / 100)
+    f = int(k)
+    c = min(f + 1, len(data) - 1)
+    if f == c:
+        return data[int(k)]
+    d0 = data[f] * (c - k)
+    d1 = data[c] * (k - f)
+    return d0 + d1
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-class Payload(BaseModel):
-    regions: list[str]
-    threshold_ms: int
+def handler(request, context):
 
+    # CORS preflight
+    if request.method == "OPTIONS":
+        return {
+            "statusCode": 200,
+            "headers": {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            },
+            "body": ""
+        }
 
-@app.post("/")
-async def compute_latency(payload: Payload):
+    if request.method != "POST":
+        return {
+            "statusCode": 405,
+            "headers": {
+                "Access-Control-Allow-Origin": "*",
+            },
+            "body": json.dumps({"error": "Method not allowed"})
+        }
+
+    try:
+        body = json.loads(request.body.decode())
+    except:
+        body = {}
+
+    regions = body.get("regions", [])
+    threshold = body.get("threshold_ms", 0)
 
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     file_path = os.path.join(BASE_DIR, "q-vercel-latency.json")
@@ -30,7 +54,7 @@ async def compute_latency(payload: Payload):
 
     response = {}
 
-    for region in payload.regions:
+    for region in regions:
         records = [r for r in data if r["region"] == region]
         if not records:
             continue
@@ -38,14 +62,25 @@ async def compute_latency(payload: Payload):
         latencies = [r["latency_ms"] for r in records]
         uptimes = [r["uptime"] for r in records]
 
+        avg_latency = sum(latencies) / len(latencies)
+        avg_uptime = sum(uptimes) / len(uptimes)
+        p95_latency = percentile(latencies, 95)
+        breaches = sum(1 for l in latencies if l > threshold)
+
         response[region] = {
-            "avg_latency": float(np.mean(latencies)),
-            "p95_latency": float(np.percentile(latencies, 95)),
-            "avg_uptime": float(np.mean(uptimes)),
-            "breaches": sum(1 for l in latencies if l > payload.threshold_ms),
+            "avg_latency": float(avg_latency),
+            "p95_latency": float(p95_latency),
+            "avg_uptime": float(avg_uptime),
+            "breaches": breaches,
         }
 
-    return response
-
-
-handler = app
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Content-Type": "application/json",
+        },
+        "body": json.dumps(response),
+    }
