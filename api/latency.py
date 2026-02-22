@@ -17,7 +17,7 @@ class Payload(BaseModel):
     regions: list[str]
     threshold_ms: int
 
-@app.post("/api/latency")
+@app.post("/")
 async def compute_latency(payload: Payload):
 
     with open("q-vercel-latency.json") as f:
