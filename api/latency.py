@@ -1,38 +1,26 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import json
 import numpy as np
 import os
 
-def handler(request, context):
+app = FastAPI()
 
-    # CORS preflight
-    if request.method == "OPTIONS":
-        return {
-            "statusCode": 200,
-            "headers": {
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-            },
-            "body": ""
-        }
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    if request.method != "POST":
-        return {
-            "statusCode": 405,
-            "headers": {
-                "Access-Control-Allow-Origin": "*",
-            },
-            "body": json.dumps({"error": "Method not allowed"})
-        }
+class Payload(BaseModel):
+    regions: list[str]
+    threshold_ms: int
 
-    # Proper body parsing for Vercel
-    try:
-        body = json.loads(request.body.decode())
-    except:
-        body = {}
 
-    regions = body.get("regions", [])
-    threshold = body.get("threshold_ms", 0)
+@app.post("/")
+async def compute_latency(payload: Payload):
 
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     file_path = os.path.join(BASE_DIR, "q-vercel-latency.json")
@@ -42,7 +30,7 @@ def handler(request, context):
 
     response = {}
 
-    for region in regions:
+    for region in payload.regions:
         records = [r for r in data if r["region"] == region]
         if not records:
             continue
@@ -54,16 +42,10 @@ def handler(request, context):
             "avg_latency": float(np.mean(latencies)),
             "p95_latency": float(np.percentile(latencies, 95)),
             "avg_uptime": float(np.mean(uptimes)),
-            "breaches": sum(1 for l in latencies if l > threshold),
+            "breaches": sum(1 for l in latencies if l > payload.threshold_ms),
         }
 
-    return {
-        "statusCode": 200,
-        "headers": {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Content-Type": "application/json",
-        },
-        "body": json.dumps(response),
-    }
+    return response
+
+
+handler = app
